@@ -23,6 +23,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
@@ -36,27 +38,24 @@ public class Youtube_up {
     /** Global instance of the JSON factory. */
    // private static final JsonFactory JSON_FACTORY = new JacksonFactory();
 
-    /** Global instance of Youtube object to make all API requests. */
-    private static YouTube youtube;
-
-    /* Global instance of the format used for the video being uploaded (MIME type). */
-    private static String VIDEO_FILE_FORMAT = "video/*";
-
     // For counting parsed files, but already uploaded in DB
     static Integer alreadyInsertedCounter = 0;
-
     // For counting successfully uploaded & inserted files
     static Integer successfullyInsertedCounter = 0;
-
     //Local DB name that should be used for insert and select
     static String dbNAME = "UploadedFiles.db";
-
+    // You can set file size threshold here. Files below that size will not be uploaded
     static Long fileSize = Long.valueOf(51200);
-
     // re-try-catch counters
     static int count = 0;
     static int maxTries = 5;
     static int sleepTime = 30; //in seconds
+    /**
+     * Global instance of Youtube object to make all API requests.
+     */
+    private static YouTube youtube;
+    /* Global instance of the format used for the video being uploaded (MIME type). */
+    private static String VIDEO_FILE_FORMAT = "video/*";
 
     /**
      * Authorizes the installed application to access user's protected data.
@@ -153,7 +152,7 @@ public class Youtube_up {
                         try {
                         // if there is such MD5 in DB don't upload & insert it
                         if (checkMD5(getMD5Checksum(file.getCanonicalPath()))) {
-                            System.out.println("Video already in DB!");
+                            System.out.println(" : Video already in DB!");
 
                             ++alreadyInsertedCounter;
 
@@ -303,7 +302,7 @@ public class Youtube_up {
                                 }
 
                                 // Check if maxTries is reached else sleep for sleepTime seconds
-                                if (++count == maxTries) {
+                                if (count++ == maxTries) {
                                     if (insertIntoEventsTable("ERROR", msgToInsert)) {
                                         System.out.println(msgToInsert);
                                         System.exit(-1);
@@ -324,7 +323,7 @@ public class Youtube_up {
                                 }
 
                                 // Check if maxTries is reached else sleep for sleepTime seconds
-                                if (++count == maxTries) {
+                                if (count++ == maxTries) {
                                     if (insertIntoEventsTable("ERROR", msgToInsert)) {
                                         System.out.println(msgToInsert);
                                         System.exit(-1);
@@ -343,11 +342,28 @@ public class Youtube_up {
                                     System.out.println(msgToInsert);
                                 }
                                 // Check if maxTries is reached else sleep for sleepTime seconds
-                                if (++count == maxTries) {
+                                if (count++ == maxTries) {
+                                    if (insertIntoEventsTable("ERROR", msgToInsert)) {
+                                        System.out.println(msgToInsert);
+
+                                    }
+
+                                    msgToInsert = "Successfully Inserted New Videos = " + successfullyInsertedCounter;
+                                    if (insertIntoEventsTable("INFO", msgToInsert)) {
+                                        System.out.println(msgToInsert);
+                                    }
+
+                                    msgToInsert = "Already Inserted Videos = " + alreadyInsertedCounter;
+                                    if (insertIntoEventsTable("INFO", msgToInsert)) {
+                                        System.out.println(msgToInsert);
+                                    }
+
+                                    msgToInsert = "-= END of RUN =-  due to exception";
                                     if (insertIntoEventsTable("ERROR", msgToInsert)) {
                                         System.out.println(msgToInsert);
                                         System.exit(-1);
                                     }
+
                                     else {
                                         Thread.sleep(1000*sleepTime);
                                     }
@@ -396,9 +412,9 @@ public class Youtube_up {
             ResultSet rs = stmt.executeQuery( "SELECT * FROM UPLOADS WHERE MD5='" + md5 +"';" );
             while ( rs.next() ) {
                 String MD5result = rs.getString("md5");
-                if (MD5result != null ) dbMD5 = true;
-                else dbMD5 = false;
 
+                //if (MD5result != null) dbMD5 = true;
+                dbMD5 = MD5result != null;
             }
             rs.close();
             stmt.close();
@@ -469,7 +485,10 @@ public class Youtube_up {
         /*File currentDir = new File("."); // current directory
         displayDirectoryContents(currentDir);*/
 
-        // parse arguments
+        // used to measure the running time of the program
+        long startTime = System.currentTimeMillis();
+
+        // parse input arguments
         if (args.length == 0 || args.length > 1) {
             usage();
         }
@@ -494,7 +513,12 @@ public class Youtube_up {
             System.out.println(msgToInsert);
         }
 
-        msgToInsert = "-= END of RUN =- ";
+        // used to measure the running time of the program
+        long endTime = System.currentTimeMillis();
+        NumberFormat formatter = new DecimalFormat("#0.00");
+        String runTime = formatter.format((endTime - startTime) / 1000d);
+
+        msgToInsert = "-= END of RUN =- Execution Time: " + runTime + " seconds";
         if (insertIntoEventsTable("INFO", msgToInsert)) {
             System.out.println(msgToInsert);
         }
