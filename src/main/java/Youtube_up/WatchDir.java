@@ -40,21 +40,11 @@ package Youtube_up;
  */
 
 
-
 import com.google.api.client.auth.oauth2.Credential;
-import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp;
-import com.google.api.client.extensions.java6.auth.oauth2.FileCredentialStore;
-import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver;
-import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
-import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.client.googleapis.media.MediaHttpUploader;
 import com.google.api.client.googleapis.media.MediaHttpUploaderProgressListener;
-import com.google.api.client.http.HttpTransport;
 import com.google.api.client.http.InputStreamContent;
-import com.google.api.client.http.javanet.NetHttpTransport;
-import com.google.api.client.json.JsonFactory;
-import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.youtube.YouTube;
 import com.google.api.services.youtube.model.Video;
 import com.google.api.services.youtube.model.VideoSnippet;
@@ -81,88 +71,66 @@ import static java.nio.file.StandardWatchEventKinds.*;
 public class WatchDir {
 
 
-/** Global instance of the HTTP transport. */
-/*
-
-    private static final HttpTransport HTTP_TRANSPORT = new NetHttpTransport();
-
-*/
-/** Global instance of the JSON factory. *//*
-
-
-    private static final JsonFactory JSON_FACTORY = new JacksonFactory();
-*/
-
-
-/** Global instance of Youtube object to make all API requests. */
-
+    // Global instance of Youtube object to make all API requests.
     private static YouTube youtube;
 
-
-/* Global instance of the format used for the video being uploaded (MIME type). */
-
+    // Global instance of the format used for the video being uploaded (MIME type).
     private static String VIDEO_FILE_FORMAT = "video*/";
-
-
-/**
-     * Authorizes the installed application to access user's protected data.
-     *
-     * @param scopes list of scopes needed to run youtube upload.
-     */
-
-    /*private static Credential authorize(List<String> scopes) throws Exception {
-
-        // Load client secrets.
-        GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(
-                JSON_FACTORY, UploadVideo.class.getResourceAsStream("/client_secrets.json"));
-
-        // Checks that the defaults have been replaced (Default = "Enter X here").
-        if (clientSecrets.getDetails().getClientId().startsWith("Enter")
-                || clientSecrets.getDetails().getClientSecret().startsWith("Enter ")) {
-            System.out.println(
-                    "Enter Client ID and Secret from https://code.google.com/apis/console/?api=youtube"
-                            + "into youtube-cmdline-uploadvideo-sample/src/main/resources/client_secrets.json");
-            System.exit(1);
-        }
-
-        // Set up file credential store.
-        FileCredentialStore credentialStore = new FileCredentialStore(
-                new File(System.getProperty("user.home"), ".credentials/youtube-api-uploadvideo.json"),
-                JSON_FACTORY);
-
-        // Set up authorization code flow.
-        GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
-                HTTP_TRANSPORT, JSON_FACTORY, clientSecrets, scopes).setCredentialStore(credentialStore)
-                .build();
-
-        // Build the local server and bind it to port 9000
-        LocalServerReceiver localReceiver = new LocalServerReceiver.Builder().setPort(8080).build();
-
-        // Authorize.
-        return new AuthorizationCodeInstalledApp(flow, localReceiver).authorize("user");
-    }*/
-
-
-/**
-     * Uploads user selected video in the project folder to the user's YouTube account using OAuth2
-     * for authentication.
-     *
-     * @param args command line args (not used).
-     */
-
-
     private final WatchService watcher;
-    private final Map<WatchKey,Path> keys;
+    private final Map<WatchKey, Path> keys;
     private final boolean recursive;
     private boolean trace = false;
 
-    @SuppressWarnings("unchecked")
-    static <T> WatchEvent<T> cast(WatchEvent<?> event) {
-        return (WatchEvent<T>)event;
+    /**
+     * Creates a WatchService and registers the given directory
+     */
+
+    WatchDir(Path dir, boolean recursive) throws IOException {
+        this.watcher = FileSystems.getDefault().newWatchService();
+        this.keys = new HashMap<WatchKey, Path>();
+        this.recursive = recursive;
+
+        if (recursive) {
+            System.out.format("Scanning %s ...\n", dir);
+            registerAll(dir);
+            System.out.println("Done.");
+        } else {
+            register(dir);
+        }
+
+        // enable trace after initial registration
+        this.trace = true;
     }
 
+    @SuppressWarnings("unchecked")
+    static <T> WatchEvent<T> cast(WatchEvent<?> event) {
+        return (WatchEvent<T>) event;
+    }
 
-/**
+    static void usage() {
+        System.err.println("usage: java WatchDir [-notrecursive] dir");
+        System.exit(-1);
+    }
+
+    public static void main(String[] args) throws IOException {
+        // parse arguments
+        if (args.length == 0 || args.length > 2)
+            usage();
+        boolean recursive = true;
+        int dirArg = 0;
+        if (args[0].equals("-notrecursive")) {
+            if (args.length < 2)
+                usage();
+            recursive = false;
+            dirArg++;
+        }
+
+        // register directory and process its events
+        Path dir = Paths.get(args[dirArg]);
+        new WatchDir(dir, recursive).processEvents();
+    }
+
+    /**
      * Register the given directory with the WatchService
      */
 
@@ -181,8 +149,7 @@ public class WatchDir {
         keys.put(key, dir);
     }
 
-
-/**
+    /**
      * Register the given directory, and all its sub-directories, with the
      * WatchService.
      */
@@ -192,43 +159,19 @@ public class WatchDir {
         Files.walkFileTree(start, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
-                    throws IOException
-            {
+                    throws IOException {
                 register(dir);
                 return FileVisitResult.CONTINUE;
             }
         });
     }
 
-
-/**
-     * Creates a WatchService and registers the given directory
-     */
-
-    WatchDir(Path dir, boolean recursive) throws IOException {
-        this.watcher = FileSystems.getDefault().newWatchService();
-        this.keys = new HashMap<WatchKey,Path>();
-        this.recursive = recursive;
-
-        if (recursive) {
-            System.out.format("Scanning %s ...\n", dir);
-            registerAll(dir);
-            System.out.println("Done.");
-        } else {
-            register(dir);
-        }
-
-        // enable trace after initial registration
-        this.trace = true;
-    }
-
-
-/**
+    /**
      * Process all events for keys queued to the watcher
      */
 
     void processEvents() {
-        for (;;) {
+        for (; ; ) {
 
             // wait for key to be signalled
             WatchKey key;
@@ -262,28 +205,28 @@ public class WatchDir {
 
                 List<String> scopes = Lists.newArrayList("https://www.googleapis.com/auth/youtube.upload");
 
-                    // file extension filter. If you want you can add more video extensions here
-                    String lowercaseName = name.toString().toLowerCase();
-                    if (lowercaseName.endsWith(".webm") || lowercaseName.endsWith(".flv")
-                            || lowercaseName.endsWith(".f4v") || lowercaseName.endsWith(".mov")
-                            || lowercaseName.endsWith(".3gp") || lowercaseName.endsWith(".avi")
-                            || lowercaseName.endsWith(".mp4")) {
+                // file extension filter. If you want you can add more video extensions here
+                String lowercaseName = name.toString().toLowerCase();
+                if (lowercaseName.endsWith(".webm") || lowercaseName.endsWith(".flv")
+                        || lowercaseName.endsWith(".f4v") || lowercaseName.endsWith(".mov")
+                        || lowercaseName.endsWith(".3gp") || lowercaseName.endsWith(".avi")
+                        || lowercaseName.endsWith(".mp4")) {
 
-                        try {
-                            // Authorization.
-                            Credential credential = Auth.authorize(scopes, "uploadvideo");
+                    try {
+                        // Authorization.
+                        Credential credential = Auth.authorize(scopes, "uploadvideo");
 
-                            // YouTube object used to make all API requests.
-                            youtube = new YouTube.Builder(Auth.HTTP_TRANSPORT, Auth.JSON_FACTORY, credential).setApplicationName(
-                                    "Youtube_up").build();
+                        // YouTube object used to make all API requests.
+                        youtube = new YouTube.Builder(Auth.HTTP_TRANSPORT, Auth.JSON_FACTORY, credential).setApplicationName(
+                                "Youtube_up").build();
 
-                            // We get the user selected local video file to upload.
-                            //  File videoFile = getVideoFromUser();
-                            File videoFile = child.toFile();
-                            System.out.println("You chose " + videoFile + " to upload.");
+                        // We get the user selected local video file to upload.
+                        //  File videoFile = getVideoFromUser();
+                        File videoFile = child.toFile();
+                        System.out.println("You chose " + videoFile + " to upload.");
 
-                            // Add extra information to the video before uploading.
-                            Video videoObjectDefiningMetadata = new Video();
+                        // Add extra information to the video before uploading.
+                        Video videoObjectDefiningMetadata = new Video();
 
 
                             /*
@@ -292,12 +235,12 @@ public class WatchDir {
                            * it to "unlisted" or "private" via API.
                            */
 
-                            VideoStatus status = new VideoStatus();
-                            status.setPrivacyStatus("unlisted");
-                            videoObjectDefiningMetadata.setStatus(status);
+                        VideoStatus status = new VideoStatus();
+                        status.setPrivacyStatus("unlisted");
+                        videoObjectDefiningMetadata.setStatus(status);
 
-                            // We set a majority of the metadata with the VideoSnippet object.
-                            VideoSnippet snippet = new VideoSnippet();
+                        // We set a majority of the metadata with the VideoSnippet object.
+                        VideoSnippet snippet = new VideoSnippet();
 
 
 /*
@@ -306,25 +249,25 @@ public class WatchDir {
                            * and use your own standard names.
                            */
 
-                            Calendar cal = Calendar.getInstance();
-                            snippet.setTitle(name + " " + cal.getTime());
-                            snippet.setDescription(
-                                    "Video uploaded via YouTube Data API V3 using the Java library " + "on " + cal.getTime());
+                        Calendar cal = Calendar.getInstance();
+                        snippet.setTitle(name + " " + cal.getTime());
+                        snippet.setDescription(
+                                "Video uploaded via YouTube Data API V3 using the Java library " + "on " + cal.getTime());
 
-                            // Set your keywords.
-                            List<String> tags = new ArrayList<String>();
-                            tags.add("Test");
-                            tags.add("Java");
-                            tags.add("Auto upload");
-                            tags.add("YouTube Data API V3");
-                            snippet.setTags(tags);
+                        // Set your keywords.
+                        List<String> tags = new ArrayList<String>();
+                        tags.add("Test");
+                        tags.add("Java");
+                        tags.add("Auto upload");
+                        tags.add("YouTube Data API V3");
+                        snippet.setTags(tags);
 
-                            // Set completed snippet to the video object.
-                            videoObjectDefiningMetadata.setSnippet(snippet);
+                        // Set completed snippet to the video object.
+                        videoObjectDefiningMetadata.setSnippet(snippet);
 
-                            InputStreamContent mediaContent = new InputStreamContent(
-                                    VIDEO_FILE_FORMAT, new BufferedInputStream(new FileInputStream(videoFile)));
-                            mediaContent.setLength(videoFile.length());
+                        InputStreamContent mediaContent = new InputStreamContent(
+                                VIDEO_FILE_FORMAT, new BufferedInputStream(new FileInputStream(videoFile)));
+                        mediaContent.setLength(videoFile.length());
 
 
 /*
@@ -332,11 +275,11 @@ public class WatchDir {
                            * uploaded. 2. Metadata we want associated with the uploaded video. 3. Video file itself.
                            */
 
-                            YouTube.Videos.Insert videoInsert = youtube.videos()
-                                    .insert("snippet,statistics,status", videoObjectDefiningMetadata, mediaContent);
+                        YouTube.Videos.Insert videoInsert = youtube.videos()
+                                .insert("snippet,statistics,status", videoObjectDefiningMetadata, mediaContent);
 
-                            // Set the upload type and add event listener.
-                            MediaHttpUploader uploader = videoInsert.getMediaHttpUploader();
+                        // Set the upload type and add event listener.
+                        MediaHttpUploader uploader = videoInsert.getMediaHttpUploader();
 
 
 /*
@@ -345,60 +288,59 @@ public class WatchDir {
                            * in data chunks.
                            */
 
-                            uploader.setDirectUploadEnabled(false);
+                        uploader.setDirectUploadEnabled(false);
 
-                            MediaHttpUploaderProgressListener progressListener = new MediaHttpUploaderProgressListener() {
-                                public void progressChanged(MediaHttpUploader uploader) throws IOException {
-                                    switch (uploader.getUploadState()) {
-                                        case INITIATION_STARTED:
-                                            System.out.println("Initiation Started");
-                                            break;
-                                        case INITIATION_COMPLETE:
-                                            System.out.println("Initiation Completed");
-                                            break;
-                                        case MEDIA_IN_PROGRESS:
-                                            System.out.println("Upload in progress");
-                                            System.out.println("Upload percentage: " + uploader.getProgress());
-                                            break;
-                                        case MEDIA_COMPLETE:
-                                            System.out.println("Upload Completed!");
-                                            break;
-                                        case NOT_STARTED:
-                                            System.out.println("Upload Not Started!");
-                                            break;
-                                    }
+                        MediaHttpUploaderProgressListener progressListener = new MediaHttpUploaderProgressListener() {
+                            public void progressChanged(MediaHttpUploader uploader) throws IOException {
+                                switch (uploader.getUploadState()) {
+                                    case INITIATION_STARTED:
+                                        System.out.println("Initiation Started");
+                                        break;
+                                    case INITIATION_COMPLETE:
+                                        System.out.println("Initiation Completed");
+                                        break;
+                                    case MEDIA_IN_PROGRESS:
+                                        System.out.println("Upload in progress");
+                                        System.out.println("Upload percentage: " + uploader.getProgress());
+                                        break;
+                                    case MEDIA_COMPLETE:
+                                        System.out.println("Upload Completed!");
+                                        break;
+                                    case NOT_STARTED:
+                                        System.out.println("Upload Not Started!");
+                                        break;
                                 }
-                            };
-                            uploader.setProgressListener(progressListener);
+                            }
+                        };
+                        uploader.setProgressListener(progressListener);
 
-                            // Execute upload.
-                            Video returnedVideo = videoInsert.execute();
+                        // Execute upload.
+                        Video returnedVideo = videoInsert.execute();
 
-                            // Print out returned results.
-                            System.out.println("\n================== Returned Video ==================\n");
-                            System.out.println("  - Id: " + returnedVideo.getId());
-                            System.out.println("  - Title: " + returnedVideo.getSnippet().getTitle());
-                            System.out.println("  - Tags: " + returnedVideo.getSnippet().getTags());
-                            System.out.println("  - Privacy Status: " + returnedVideo.getStatus().getPrivacyStatus());
-                            System.out.println("  - Video Count: " + returnedVideo.getStatistics().getViewCount());
+                        // Print out returned results.
+                        System.out.println("\n================== Returned Video ==================\n");
+                        System.out.println("  - Id: " + returnedVideo.getId());
+                        System.out.println("  - Title: " + returnedVideo.getSnippet().getTitle());
+                        System.out.println("  - Tags: " + returnedVideo.getSnippet().getTags());
+                        System.out.println("  - Privacy Status: " + returnedVideo.getStatus().getPrivacyStatus());
+                        System.out.println("  - Video Count: " + returnedVideo.getStatistics().getViewCount());
 
-                        } catch (GoogleJsonResponseException e) {
-                            System.err.println("GoogleJsonResponseException code: " + e.getDetails().getCode() + " : "
-                                    + e.getDetails().getMessage());
-                            e.printStackTrace();
-                        } catch (IOException e) {
-                            System.err.println("IOException: " + e.getMessage());
-                            e.printStackTrace();
-                        } catch (Throwable t) {
-                            System.err.println("Throwable: " + t.getMessage());
-                            t.printStackTrace();
-                        }
-
-
-
-                    } else {
-                        System.out.println("Not a video file added!");
+                    } catch (GoogleJsonResponseException e) {
+                        System.err.println("GoogleJsonResponseException code: " + e.getDetails().getCode() + " : "
+                                + e.getDetails().getMessage());
+                        e.printStackTrace();
+                    } catch (IOException e) {
+                        System.err.println("IOException: " + e.getMessage());
+                        e.printStackTrace();
+                    } catch (Throwable t) {
+                        System.err.println("Throwable: " + t.getMessage());
+                        t.printStackTrace();
                     }
+
+
+                } else {
+                    System.out.println("Not a video file added!");
+                }
 
                 // if directory is created, and watching recursively, then
                 // register it and its sub-directories
@@ -424,29 +366,6 @@ public class WatchDir {
                 }
             }
         }
-    }
-
-    static void usage() {
-        System.err.println("usage: java WatchDir [-notrecursive] dir");
-        System.exit(-1);
-    }
-
-    public static void main(String[] args) throws IOException {
-        // parse arguments
-        if (args.length == 0 || args.length > 2)
-            usage();
-        boolean recursive = true;
-        int dirArg = 0;
-        if (args[0].equals("-notrecursive")) {
-            if (args.length < 2)
-                usage();
-            recursive = false;
-            dirArg++;
-        }
-
-        // register directory and process its events
-        Path dir = Paths.get(args[dirArg]);
-        new WatchDir(dir, recursive).processEvents();
     }
 }
 

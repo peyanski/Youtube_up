@@ -1,6 +1,6 @@
 package Youtube_up;
 /**
- * Created by kpeyanski on 21.10.2015 �..
+ * Created by kpeyanski on 21.10.2015
  */
 
 import com.google.api.client.auth.oauth2.Credential;
@@ -23,78 +23,23 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 
 public class Youtube_up {
 
-
-    /** Global instance of the HTTP transport. */
-  //  private static final HttpTransport HTTP_TRANSPORT = new NetHttpTransport();
-
-    /** Global instance of the JSON factory. */
-   // private static final JsonFactory JSON_FACTORY = new JacksonFactory();
-
-    /** Global instance of Youtube object to make all API requests. */
-    private static YouTube youtube;
-
-    /* Global instance of the format used for the video being uploaded (MIME type). */
-    private static String VIDEO_FILE_FORMAT = "video/*";
-
-    // For counting parsed files, but already uploaded in DB
-    static Integer alreadyInsertedCounter = 0;
-
-    // For counting successfully uploaded & inserted files
-    static Integer successfullyInsertedCounter = 0;
-
-    //Local DB name that should be used for insert and select
-    static String dbNAME = "UploadedFiles.db";
-
-    static Long fileSize = Long.valueOf(51200);
-
-    // re-try-catch counters
-    static int count = 0;
-    static int maxTries = 5;
-    static int sleepTime = 30; //in seconds
-
-    /**
-     * Authorizes the installed application to access user's protected data.
-     *
-     * @param //scopes list of scopes needed to run youtube upload.
-     */
-   /* private static Credential authorize(List<String> scopes) throws Exception {
-
-        // Load client secrets.
-        GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(
-                JSON_FACTORY, UploadVideo.class.getResourceAsStream("/client_secrets.json"));
-
-        // Checks that the defaults have been replaced (Default = "Enter X here").
-        if (clientSecrets.getDetails().getClientId().startsWith("Enter")
-                || clientSecrets.getDetails().getClientSecret().startsWith("Enter ")) {
-            System.out.println(
-                    "Enter Client ID and Secret from https://code.google.com/apis/console/?api=youtube"
-                            + "into youtube-cmdline-uploadvideo-sample/src/main/resources/client_secrets.json");
-            System.exit(1);
-        }
-
-        // Set up file credential store.
-        FileCredentialStore credentialStore = new FileCredentialStore(
-                new File(System.getProperty("user.home"), ".credentials/youtube-api-uploadvideo.json"),
-                JSON_FACTORY);
-
-        // Set up authorization code flow.
-        GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
-                HTTP_TRANSPORT, JSON_FACTORY, clientSecrets, scopes).setCredentialStore(credentialStore)
-                .build();
-
-        // Build the local server and bind it to port 9000
-        LocalServerReceiver localReceiver = new LocalServerReceiver.Builder().setPort(8080).build();
-
-        // Authorize.
-        return new AuthorizationCodeInstalledApp(flow, localReceiver).authorize("user");
-    }*/
-
+    static Integer alreadyInsertedCounter = 0;      // For counting parsed files, but already uploaded in DB
+    static Integer successfullyInsertedCounter = 0; // For counting successfully uploaded & inserted files
+    static String dbNAME = "UploadedFiles.db";      // Local DB name that should be used for insert and select
+    static Long fileSize = Long.valueOf(51200);     // You can set file size threshold here. Files below that size will not be uploaded
+    static int count = 0;                           // re-try-catch counters
+    static int maxTries = 5;                        // max tries if exception happens
+    static int sleepTime = 30;                      // hom many seconds to wait before retry
+    private static YouTube youtube;                 // Global instance of Youtube object to make all API requests.
+    private static String VIDEO_FILE_FORMAT = "video/*";  //Global instance of the format used for the video being uploaded (MIME type).
 
     // URL - http://www.rgagnon.com/javadetails/java-0416.html
     // a byte array to a HEX string
@@ -136,24 +81,25 @@ public class Youtube_up {
                 if (file.isDirectory()) {
                     displayDirectoryContents(file);
                 } else {
-                    // get basic file attribute of the file
-                    Path filePath = file.toPath();
-                    BasicFileAttributes attr = Files.readAttributes(filePath, BasicFileAttributes.class);
+                    Path filePath = file.toPath();      // get basic file attribute of the file
+                    BasicFileAttributes fileAttr = Files.readAttributes(filePath, BasicFileAttributes.class);
+
                     // file extension filter is here also file size should be above 512004bytes(50Kb)
-                    if ((file.getCanonicalPath().toLowerCase().endsWith(".wmv") ||
-                            file.getCanonicalPath().toLowerCase().endsWith(".flv") ||
-                            file.getCanonicalPath().toLowerCase().endsWith(".f4v") ||
-                            file.getCanonicalPath().toLowerCase().endsWith(".mov") ||
-                            file.getCanonicalPath().toLowerCase().endsWith(".3gp") ||
-                            file.getCanonicalPath().toLowerCase().endsWith(".avi") ||
-                            file.getCanonicalPath().toLowerCase().endsWith(".mp4")) &&
-                                    (attr.size() > fileSize ) ) {    // uf file size is bigger than fileSize var
-                        System.out.print(file.getCanonicalPath() + " - Found; Size - " + attr.size());
+                    if ((fileAttr.size() > fileSize) &&         // if file size is bigger than fileSize var
+                            (file.getCanonicalPath().toLowerCase().endsWith(".wmv") ||
+                                    file.getCanonicalPath().toLowerCase().endsWith(".flv") ||
+                                    file.getCanonicalPath().toLowerCase().endsWith(".f4v") ||
+                                    file.getCanonicalPath().toLowerCase().endsWith(".mov") ||
+                                    file.getCanonicalPath().toLowerCase().endsWith(".3gp") ||
+                                    file.getCanonicalPath().toLowerCase().endsWith(".avi") ||
+                                    file.getCanonicalPath().toLowerCase().endsWith(".mp4"))) {
+
+                        System.out.print(file.getCanonicalPath() + " - Found; Size - " + fileAttr.size());
 
                         try {
                         // if there is such MD5 in DB don't upload & insert it
                         if (checkMD5(getMD5Checksum(file.getCanonicalPath()))) {
-                            System.out.println("Video already in DB!");
+                            System.out.println(" : Video already in DB!");
 
                             ++alreadyInsertedCounter;
 
@@ -170,11 +116,6 @@ public class Youtube_up {
                                 youtube = new YouTube.Builder(Auth.HTTP_TRANSPORT, Auth.JSON_FACTORY, credential).setApplicationName(
                                         "Youtube_up").build();
 
-                                // We get the user selected local video file to upload.
-                                //  File videoFile = getVideoFromUser();
-                                //File videoFile = child.toFile();
-                                //File videoFile = file;
-                                //System.out.println("You chose " + file + " to upload.");
                                 System.out.println("New video! Youtube_up uploading...");
 
 
@@ -204,11 +145,10 @@ public class Youtube_up {
                                 snippet.setDescription(
                                         "Video uploaded via Youtube_up" + "on " + cal.getTime());
 
-
                                 // Set keywords.
                                 List<String> tags = new ArrayList<String>();
                                 tags.add("Youtube_up");
-                                tags.add(attr.creationTime().toString()); //movie creation date
+                                tags.add(fileAttr.creationTime().toString()); //movie creation date
                                 tags.add("Auto upload");
                                 tags.add("YouTube Data API V3");
                                 snippet.setTags(tags);
@@ -303,7 +243,7 @@ public class Youtube_up {
                                 }
 
                                 // Check if maxTries is reached else sleep for sleepTime seconds
-                                if (++count == maxTries) {
+                                if (count++ == maxTries) {
                                     if (insertIntoEventsTable("ERROR", msgToInsert)) {
                                         System.out.println(msgToInsert);
                                         System.exit(-1);
@@ -324,7 +264,7 @@ public class Youtube_up {
                                 }
 
                                 // Check if maxTries is reached else sleep for sleepTime seconds
-                                if (++count == maxTries) {
+                                if (count++ == maxTries) {
                                     if (insertIntoEventsTable("ERROR", msgToInsert)) {
                                         System.out.println(msgToInsert);
                                         System.exit(-1);
@@ -343,11 +283,28 @@ public class Youtube_up {
                                     System.out.println(msgToInsert);
                                 }
                                 // Check if maxTries is reached else sleep for sleepTime seconds
-                                if (++count == maxTries) {
+                                if (count++ == maxTries) {
+                                    if (insertIntoEventsTable("ERROR", msgToInsert)) {
+                                        System.out.println(msgToInsert);
+
+                                    }
+
+                                    msgToInsert = "Successfully Inserted New Videos = " + successfullyInsertedCounter;
+                                    if (insertIntoEventsTable("INFO", msgToInsert)) {
+                                        System.out.println(msgToInsert);
+                                    }
+
+                                    msgToInsert = "Already Inserted Videos = " + alreadyInsertedCounter;
+                                    if (insertIntoEventsTable("INFO", msgToInsert)) {
+                                        System.out.println(msgToInsert);
+                                    }
+
+                                    msgToInsert = "-= END of RUN =-  due to exception";
                                     if (insertIntoEventsTable("ERROR", msgToInsert)) {
                                         System.out.println(msgToInsert);
                                         System.exit(-1);
                                     }
+
                                     else {
                                         Thread.sleep(1000*sleepTime);
                                     }
@@ -365,12 +322,10 @@ public class Youtube_up {
                         // upload end
 
 
-
-
                     }
                     catch (Exception e) {
                         e.printStackTrace();
-                        System.out.println("got here 1");  // DELETE ME AFTER SUCCESSFUL RE-TRY-CATCH IMPLEMENTATION
+                        System.out.println("got here 1");  // TODO: DELETE ME AFTER SUCCESSFUL RE-TRY-CATCH IMPLEMENTATION
                     }
 
                     }
@@ -378,7 +333,7 @@ public class Youtube_up {
             }
         } catch (IOException e) {
             e.printStackTrace();
-            System.out.println("got here 2");  // DELETE ME AFTER SUCCESSFUL RE-TRY-CATCH IMPLEMENTATION
+            System.out.println("got here 2");  // TODO: DELETE ME AFTER SUCCESSFUL RE-TRY-CATCH IMPLEMENTATION
         }
     }
 
@@ -396,9 +351,9 @@ public class Youtube_up {
             ResultSet rs = stmt.executeQuery( "SELECT * FROM UPLOADS WHERE MD5='" + md5 +"';" );
             while ( rs.next() ) {
                 String MD5result = rs.getString("md5");
-                if (MD5result != null ) dbMD5 = true;
-                else dbMD5 = false;
 
+                //if (MD5result != null) dbMD5 = true;
+                dbMD5 = MD5result != null;
             }
             rs.close();
             stmt.close();
@@ -469,7 +424,10 @@ public class Youtube_up {
         /*File currentDir = new File("."); // current directory
         displayDirectoryContents(currentDir);*/
 
-        // parse arguments
+        // used to measure the running time of the program
+        long startTime = System.currentTimeMillis();
+
+        // parse input arguments
         if (args.length == 0 || args.length > 1) {
             usage();
         }
@@ -494,7 +452,12 @@ public class Youtube_up {
             System.out.println(msgToInsert);
         }
 
-        msgToInsert = "-= END of RUN =- ";
+        // used to measure the running time of the program
+        long endTime = System.currentTimeMillis();
+        NumberFormat formatter = new DecimalFormat("#0.00");
+        String runTime = formatter.format((endTime - startTime) / 1000d);
+
+        msgToInsert = "-= END of RUN =- Execution Time: " + runTime + " seconds";
         if (insertIntoEventsTable("INFO", msgToInsert)) {
             System.out.println(msgToInsert);
         }
