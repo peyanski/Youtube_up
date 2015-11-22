@@ -33,8 +33,8 @@ public class Youtube_up {
 
     static Integer alreadyInsertedCounter = 0;      // For counting parsed files, but already uploaded in DB
     static Integer successfullyInsertedCounter = 0; // For counting successfully uploaded & inserted files
-    static String dbNAME = "UploadedFiles.db";      // Local DB name that should be used for insert and select
-    static Long fileSize = Long.valueOf(51200);     // You can set file size threshold here. Files below that size will not be uploaded
+    private static String dbNAME = "UploadedFiles.db";      // Local DB name that should be used for insert and select
+    private static Long fileSize = Long.valueOf(51200);     // You can set file size threshold here. Files below that size will not be uploaded
     static int count = 0;                           // re-try-catch counters
     static int maxTries = 5;                        // max tries if exception happens
     static int sleepTime = 30;                      // hom many seconds to wait before retry
