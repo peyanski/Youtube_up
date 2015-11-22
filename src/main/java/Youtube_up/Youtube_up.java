@@ -413,6 +413,43 @@ public class Youtube_up {
         return true;
     }
 
+    // returns true if tables UPLOADS & EVENTS are successfully created
+    public static boolean dbsCreate() {
+        Connection c = null;
+        Statement stmt = null;
+        try {
+            Class.forName("org.sqlite.JDBC");
+            c = DriverManager.getConnection("jdbc:sqlite:"+dbNAME);
+            stmt = c.createStatement();
+
+            // UPLOADS TABLE CREATE TABLE SQL
+            String uploadsTable = "CREATE TABLE UPLOADS " +
+                    " (FILENAME           TEXT     NOT NULL, " +
+                    " UPLOADED_AT    DEFAULT (DATETIME(CURRENT_TIMESTAMP, 'LOCALTIME')), " +
+                    " MD5            CHAR(32) NOT NULL)";
+
+            // EVENTS TABLE CREATE TABLE SQL
+            String eventsTable = "CREATE TABLE EVENTS \n" +
+                    " (TYPE           TEXT     NOT NULL, \n" +
+                    " TIMECREATED    DEFAULT (DATETIME(CURRENT_TIMESTAMP, 'LOCALTIME')), \n" +
+                    " DESCRIPTION           TEXT     NOT NULL)";
+
+            stmt.addBatch(uploadsTable);
+            stmt.addBatch(eventsTable);
+            stmt.executeBatch();
+            stmt.close();
+            c.close();
+        } catch (Exception e) {
+            System.err.println(e.getClass().getName() + ": " + e.getMessage());
+            System.exit(0);
+
+        }
+        System.out.println("UPLOADS & EVENTS Tables created successfully");
+        return true;
+
+
+    }
+
 
     static void usage() {
         System.err.println("usage: java -jar Youtube_up dir");
@@ -426,6 +463,12 @@ public class Youtube_up {
 
         // used to measure the running time of the program
         long startTime = System.currentTimeMillis();
+
+        // check if the DB file exists if not then it's created
+        File dbFile = new File (dbNAME);
+        if (!dbFile.exists()) {
+            dbsCreate();
+        }
 
         // parse input arguments
         if (args.length == 0 || args.length > 1) {
